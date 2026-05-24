@@ -1,0 +1,1136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RideGuard — Smart Safety Helmet Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #080c10;
+    --surface: #0d1117;
+    --card: #111820;
+    --border: #1e2d3d;
+    --accent: #00e5ff;
+    --accent2: #ff6b35;
+    --safe: #00ff88;
+    --warn: #ffcc00;
+    --danger: #ff2d55;
+    --text: #e8f4f8;
+    --muted: #556879;
+    --glow: 0 0 20px rgba(0,229,255,0.3);
+    --glow-danger: 0 0 20px rgba(255,45,85,0.4);
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ─── GRID BACKGROUND ─── */
+  body::before {
+    content:'';
+    position:fixed; inset:0;
+    background-image:
+      linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events:none; z-index:0;
+  }
+
+  /* ─── TOP NAV ─── */
+  nav {
+    position:fixed; top:0; left:0; right:0;
+    background: rgba(8,12,16,0.95);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 0 24px; height: 60px;
+    z-index:100;
+  }
+  .logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 28px;
+    letter-spacing: 3px;
+    color: var(--accent);
+    text-shadow: var(--glow);
+  }
+  .logo span { color: var(--accent2); }
+
+  .mode-toggle {
+    display:flex; gap:4px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px;
+  }
+  .mode-btn {
+    padding: 6px 16px;
+    border:none; border-radius:6px;
+    font-family:'Syne',sans-serif; font-size:12px; font-weight:600;
+    cursor:pointer; transition: all 0.2s;
+    letter-spacing:1px; text-transform:uppercase;
+  }
+  .mode-btn.active { background: var(--accent); color:#000; }
+  .mode-btn:not(.active) { background:transparent; color:var(--muted); }
+  .mode-btn:not(.active):hover { color:var(--accent); }
+
+  .nav-status {
+    display:flex; align-items:center; gap:8px;
+    font-family:'DM Mono',monospace; font-size:12px;
+  }
+  .status-dot {
+    width:8px; height:8px; border-radius:50%;
+    background: var(--safe);
+    box-shadow: 0 0 8px var(--safe);
+    animation: pulse 2s infinite;
+  }
+  .status-dot.disconnected { background:var(--muted); box-shadow:none; animation:none; }
+  .status-dot.danger { background:var(--danger); box-shadow:0 0 8px var(--danger); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* ─── MAIN LAYOUT ─── */
+  main {
+    padding: 80px 24px 24px;
+    max-width: 1400px;
+    margin: 0 auto;
+    position:relative; z-index:1;
+  }
+
+  /* ─── ALERT BANNER ─── */
+  #alert-banner {
+    display:none;
+    background: linear-gradient(135deg, rgba(255,45,85,0.15), rgba(255,45,85,0.05));
+    border: 1px solid var(--danger);
+    border-radius:12px;
+    padding: 16px 24px;
+    margin-bottom: 20px;
+    animation: alertPulse 1s infinite;
+    display:none;
+  }
+  #alert-banner.active { display:flex; align-items:center; gap:16px; }
+  @keyframes alertPulse {
+    0%,100%{ box-shadow: 0 0 20px rgba(255,45,85,0.3); }
+    50%{ box-shadow: 0 0 40px rgba(255,45,85,0.6); }
+  }
+  .alert-icon { font-size:28px; }
+  .alert-title { font-family:'Bebas Neue',sans-serif; font-size:22px; color:var(--danger); letter-spacing:2px; }
+  .alert-msg { font-size:13px; color:#ff8099; font-family:'DM Mono',monospace; }
+  .alert-dismiss {
+    margin-left:auto;
+    background:none; border:1px solid var(--danger);
+    color:var(--danger); padding:6px 14px; border-radius:6px;
+    cursor:pointer; font-family:'Syne',sans-serif; font-size:12px;
+    transition:all 0.2s;
+  }
+  .alert-dismiss:hover { background:var(--danger); color:#fff; }
+
+  /* ─── SECTION TITLE ─── */
+  .section-label {
+    font-family:'DM Mono',monospace; font-size:11px;
+    color:var(--accent); letter-spacing:3px; text-transform:uppercase;
+    margin-bottom: 8px;
+  }
+
+  /* ─── HERO STATS ROW ─── */
+  .hero-row {
+    display:grid;
+    grid-template-columns: repeat(4,1fr);
+    gap:16px;
+    margin-bottom:20px;
+  }
+
+  .stat-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius:12px;
+    padding: 20px;
+    position:relative;
+    overflow:hidden;
+    transition: border-color 0.3s, box-shadow 0.3s;
+    cursor:default;
+  }
+  .stat-card::before {
+    content:'';
+    position:absolute; top:0; left:0; right:0; height:2px;
+    background: var(--accent);
+    transition: background 0.3s;
+  }
+  .stat-card.safe::before { background:var(--safe); }
+  .stat-card.warn::before { background:var(--warn); }
+  .stat-card.danger::before { background:var(--danger); }
+  .stat-card.danger { border-color: rgba(255,45,85,0.4); box-shadow: var(--glow-danger); }
+
+  .stat-label {
+    font-size:11px; font-weight:600; letter-spacing:2px;
+    text-transform:uppercase; color:var(--muted); margin-bottom:8px;
+  }
+  .stat-val {
+    font-family:'Bebas Neue',sans-serif;
+    font-size:48px; line-height:1;
+    color:var(--text);
+    transition: color 0.3s;
+  }
+  .stat-val.safe { color:var(--safe); text-shadow:0 0 20px rgba(0,255,136,0.4); }
+  .stat-val.warn { color:var(--warn); text-shadow:0 0 20px rgba(255,204,0,0.4); }
+  .stat-val.danger { color:var(--danger); text-shadow:0 0 20px rgba(255,45,85,0.6); }
+  .stat-unit { font-size:14px; color:var(--muted); font-family:'DM Mono',monospace; margin-top:4px; }
+  .stat-badge {
+    position:absolute; top:16px; right:16px;
+    font-size:10px; font-weight:700; letter-spacing:1px;
+    padding:3px 8px; border-radius:4px;
+    text-transform:uppercase;
+  }
+  .badge-safe { background:rgba(0,255,136,0.15); color:var(--safe); }
+  .badge-warn { background:rgba(255,204,0,0.15); color:var(--warn); }
+  .badge-danger { background:rgba(255,45,85,0.15); color:var(--danger); }
+
+  /* ─── MIDDLE GRID ─── */
+  .mid-grid {
+    display:grid;
+    grid-template-columns: 1fr 1fr 340px;
+    gap:16px;
+    margin-bottom:20px;
+  }
+
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius:12px;
+    padding: 20px;
+  }
+  .panel-title {
+    font-family:'Syne',sans-serif; font-size:14px; font-weight:800;
+    letter-spacing:1px; text-transform:uppercase; color:var(--text);
+    margin-bottom:16px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .panel-title .dot {
+    width:6px; height:6px; border-radius:50%;
+    background:var(--accent); box-shadow:0 0 6px var(--accent);
+  }
+
+  /* ─── LIVE CHART ─── */
+  canvas#speedChart {
+    width:100%!important; height:140px!important;
+  }
+
+  /* ─── HELMET VISUAL ─── */
+  .helmet-visual {
+    display:flex; flex-direction:column; align-items:center;
+    justify-content:center; gap:16px;
+  }
+  .helmet-svg-wrap {
+    position:relative; width:140px; height:120px;
+  }
+  .helmet-ring {
+    position:absolute; inset:-10px;
+    border-radius:50%; border:2px solid transparent;
+    animation: rotateRing 4s linear infinite;
+  }
+  .helmet-ring.ring1 {
+    border-top-color: var(--accent);
+    border-right-color: transparent;
+    border-bottom-color: transparent;
+    border-left-color: var(--accent);
+  }
+  .helmet-ring.ring2 {
+    inset:-20px;
+    border-top-color: transparent;
+    border-right-color: var(--accent2);
+    border-bottom-color: var(--accent2);
+    border-left-color: transparent;
+    animation-duration:6s; animation-direction:reverse;
+  }
+  @keyframes rotateRing { to{ transform:rotate(360deg); } }
+
+  .helmet-emoji {
+    font-size:72px; line-height:1;
+    filter: drop-shadow(0 0 16px rgba(0,229,255,0.5));
+    animation: helmetFloat 3s ease-in-out infinite;
+  }
+  @keyframes helmetFloat {
+    0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)}
+  }
+
+  .sensor-pills {
+    display:flex; flex-wrap:wrap; gap:8px; justify-content:center;
+  }
+  .sensor-pill {
+    display:flex; align-items:center; gap:6px;
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:20px; padding:6px 12px;
+    font-family:'DM Mono',monospace; font-size:11px;
+  }
+  .sensor-pill .icon { font-size:14px; }
+  .sensor-pill.ok { border-color:rgba(0,255,136,0.3); color:var(--safe); }
+  .sensor-pill.bad { border-color:rgba(255,45,85,0.4); color:var(--danger); animation:alertPulse 1.5s infinite; }
+  .sensor-pill.warn { border-color:rgba(255,204,0,0.3); color:var(--warn); }
+
+  /* ─── ALCOHOL METER ─── */
+  .alcohol-meter {
+    position:relative; margin:12px 0;
+  }
+  .meter-track {
+    height:16px; background:var(--surface);
+    border-radius:8px; overflow:hidden;
+    border:1px solid var(--border);
+  }
+  .meter-fill {
+    height:100%;
+    border-radius:8px;
+    background: linear-gradient(90deg, var(--safe), var(--warn), var(--danger));
+    width:0%; transition: width 0.8s ease;
+    position:relative;
+  }
+  .meter-fill::after {
+    content:'';
+    position:absolute; right:0; top:-2px; bottom:-2px; width:3px;
+    background:#fff; border-radius:2px;
+    box-shadow:0 0 8px #fff;
+  }
+  .meter-zones {
+    display:flex; justify-content:space-between;
+    margin-top:6px; font-family:'DM Mono',monospace; font-size:10px;
+    color:var(--muted);
+  }
+
+  /* ─── LOCATION + MAP PLACEHOLDER ─── */
+  .map-box {
+    background: linear-gradient(135deg, #0a1520, #0d1e2d);
+    border: 1px solid var(--border);
+    border-radius:8px;
+    height:140px;
+    display:flex; align-items:center; justify-content:center;
+    position:relative; overflow:hidden;
+    margin-top:8px;
+  }
+  .map-dot {
+    width:12px; height:12px; border-radius:50%;
+    background:var(--accent2);
+    box-shadow:0 0 16px var(--accent2);
+    animation:pulse 1.5s infinite;
+    position:relative; z-index:2;
+  }
+  .map-ripple {
+    position:absolute;
+    border:1px solid rgba(255,107,53,0.4);
+    border-radius:50%;
+    animation:ripple 2s infinite;
+  }
+  .map-ripple:nth-child(2){ animation-delay:0.5s; }
+  .map-ripple:nth-child(3){ animation-delay:1s; }
+  @keyframes ripple {
+    0%{width:20px;height:20px;opacity:1}
+    100%{width:80px;height:80px;opacity:0}
+  }
+  .map-coords {
+    position:absolute; bottom:8px; left:8px;
+    font-family:'DM Mono',monospace; font-size:10px; color:var(--muted);
+  }
+  .map-grid-lines {
+    position:absolute; inset:0;
+    background-image:
+      linear-gradient(rgba(0,229,255,0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,0.05) 1px, transparent 1px);
+    background-size:20px 20px;
+  }
+
+  /* ─── BOTTOM ROW ─── */
+  .bottom-row {
+    display:grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap:16px;
+  }
+
+  /* ─── LOG FEED ─── */
+  .log-feed {
+    max-height:200px; overflow-y:auto;
+    display:flex; flex-direction:column; gap:4px;
+  }
+  .log-feed::-webkit-scrollbar { width:4px; }
+  .log-feed::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+  .log-entry {
+    display:flex; gap:8px; align-items:flex-start;
+    font-family:'DM Mono',monospace; font-size:11px;
+    padding:6px 8px; border-radius:6px;
+    background:var(--surface);
+    animation: fadeIn 0.3s ease;
+  }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:none} }
+  .log-time { color:var(--muted); flex-shrink:0; }
+  .log-type-safe { color:var(--safe); }
+  .log-type-warn { color:var(--warn); }
+  .log-type-danger { color:var(--danger); }
+  .log-type-info { color:var(--accent); }
+
+  /* ─── EMERGENCY BTN ─── */
+  .emergency-btn {
+    width:100%; padding:18px;
+    background: linear-gradient(135deg, rgba(255,45,85,0.2), rgba(255,45,85,0.05));
+    border: 2px solid var(--danger);
+    border-radius:12px;
+    color:var(--danger);
+    font-family:'Bebas Neue',sans-serif;
+    font-size:24px; letter-spacing:3px;
+    cursor:pointer;
+    transition:all 0.2s;
+    margin-bottom:12px;
+    display:flex; align-items:center; justify-content:center; gap:12px;
+  }
+  .emergency-btn:hover {
+    background: linear-gradient(135deg, rgba(255,45,85,0.4), rgba(255,45,85,0.1));
+    box-shadow:0 0 30px rgba(255,45,85,0.4);
+    transform:scale(1.02);
+  }
+  .emergency-btn:active { transform:scale(0.98); }
+
+  .contact-list { display:flex; flex-direction:column; gap:8px; }
+  .contact-item {
+    display:flex; align-items:center; gap:10px;
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:8px; padding:10px 14px;
+    font-size:13px;
+  }
+  .contact-avatar {
+    width:32px; height:32px; border-radius:50%;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    display:flex; align-items:center; justify-content:center;
+    font-size:14px;
+  }
+  .contact-name { font-weight:600; font-size:12px; }
+  .contact-rel { font-size:10px; color:var(--muted); font-family:'DM Mono',monospace; }
+
+  /* ─── HARDWARE CONNECT PANEL ─── */
+  #hw-panel {
+    position:fixed; inset:0;
+    background: rgba(0,0,0,0.85);
+    backdrop-filter:blur(8px);
+    display:none; align-items:center; justify-content:center;
+    z-index:200;
+  }
+  #hw-panel.open { display:flex; }
+  .hw-modal {
+    background: var(--card);
+    border:1px solid var(--border);
+    border-radius:16px;
+    padding:36px;
+    max-width:480px; width:90%;
+    position:relative;
+  }
+  .hw-title {
+    font-family:'Bebas Neue',sans-serif;
+    font-size:32px; letter-spacing:3px;
+    color:var(--accent); margin-bottom:6px;
+  }
+  .hw-subtitle { color:var(--muted); font-size:13px; margin-bottom:28px; }
+  .hw-option {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:10px; padding:16px 20px;
+    margin-bottom:12px; cursor:pointer;
+    transition:all 0.2s;
+    display:flex; align-items:center; gap:14px;
+  }
+  .hw-option:hover { border-color:var(--accent); box-shadow:var(--glow); }
+  .hw-option .opt-icon { font-size:28px; }
+  .hw-option .opt-title { font-weight:700; font-size:14px; }
+  .hw-option .opt-desc { font-size:12px; color:var(--muted); font-family:'DM Mono',monospace; margin-top:2px; }
+  .hw-input-row { display:flex; gap:8px; margin-top:16px; }
+  .hw-input {
+    flex:1; background:var(--surface);
+    border:1px solid var(--border); border-radius:8px;
+    padding:10px 14px; color:var(--text);
+    font-family:'DM Mono',monospace; font-size:13px;
+    outline:none;
+  }
+  .hw-input:focus { border-color:var(--accent); }
+  .hw-connect-btn {
+    background:var(--accent); color:#000;
+    border:none; border-radius:8px;
+    padding:10px 20px; font-family:'Syne',sans-serif;
+    font-weight:700; font-size:13px; cursor:pointer;
+    transition:all 0.2s; white-space:nowrap;
+  }
+  .hw-connect-btn:hover { filter:brightness(1.2); }
+  .hw-close {
+    position:absolute; top:16px; right:16px;
+    background:none; border:none; color:var(--muted);
+    font-size:20px; cursor:pointer;
+  }
+  .hw-close:hover { color:var(--text); }
+  .hw-code-block {
+    background:var(--bg); border:1px solid var(--border);
+    border-radius:8px; padding:14px;
+    font-family:'DM Mono',monospace; font-size:11px;
+    color:var(--accent); margin-top:16px;
+    line-height:1.6; overflow-x:auto;
+  }
+
+  /* ─── SPEED MINI CHART ─── */
+  .mini-chart { width:100%; height:60px; position:relative; overflow:hidden; }
+  .mini-chart canvas { width:100%!important; height:60px!important; }
+
+  /* ─── RESPONSIVENESS ─── */
+  @media(max-width:1100px){
+    .hero-row{ grid-template-columns:repeat(2,1fr); }
+    .mid-grid{ grid-template-columns:1fr 1fr; }
+    .bottom-row{ grid-template-columns:1fr 1fr; }
+  }
+  @media(max-width:680px){
+    .hero-row,.mid-grid,.bottom-row{ grid-template-columns:1fr; }
+    .stat-val{ font-size:36px; }
+  }
+
+  /* ─── SCROLLBAR ─── */
+  ::-webkit-scrollbar{ width:6px; }
+  ::-webkit-scrollbar-track{ background:var(--bg); }
+  ::-webkit-scrollbar-thumb{ background:var(--border); border-radius:3px; }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="logo">Ride<span>Guard</span></div>
+  <div class="mode-toggle">
+    <button class="mode-btn active" id="btn-demo" onclick="setMode('demo')">Demo Mode</button>
+    <button class="mode-btn" id="btn-real" onclick="setMode('real')">Real Hardware</button>
+  </div>
+  <div class="nav-status">
+    <div class="status-dot" id="conn-dot"></div>
+    <span id="conn-label" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted)">DEMO LIVE</span>
+  </div>
+</nav>
+
+<!-- ALERT BANNER -->
+<div id="alert-banner">
+  <div class="alert-icon">🚨</div>
+  <div>
+    <div class="alert-title" id="alert-title">EMERGENCY ALERT</div>
+    <div class="alert-msg" id="alert-msg">Rider at risk — Emergency contacts notified</div>
+  </div>
+  <button class="alert-dismiss" onclick="dismissAlert()">DISMISS</button>
+</div>
+
+<main>
+  <!-- HERO STATS -->
+  <div class="section-label">Live Sensor Data</div>
+  <div class="hero-row">
+
+    <div class="stat-card safe" id="card-helmet">
+      <div class="stat-label">Helmet Status</div>
+      <div class="stat-val safe" id="val-helmet">ON</div>
+      <div class="stat-unit">DETECTED</div>
+      <div class="stat-badge badge-safe" id="badge-helmet">✓ SAFE</div>
+    </div>
+
+    <div class="stat-card" id="card-alcohol">
+      <div class="stat-label">Alcohol Level</div>
+      <div class="stat-val safe" id="val-alcohol">0.00</div>
+      <div class="stat-unit">BAC %</div>
+      <div class="stat-badge badge-safe" id="badge-alcohol">✓ CLEAR</div>
+    </div>
+
+    <div class="stat-card safe" id="card-speed">
+      <div class="stat-label">Speed</div>
+      <div class="stat-val" id="val-speed">42</div>
+      <div class="stat-unit">KM/H</div>
+      <div class="stat-badge badge-safe" id="badge-speed">NORMAL</div>
+    </div>
+
+    <div class="stat-card safe" id="card-impact">
+      <div class="stat-label">Impact / Crash</div>
+      <div class="stat-val safe" id="val-impact">NONE</div>
+      <div class="stat-unit">G-FORCE: <span id="val-gforce">0.2</span>g</div>
+      <div class="stat-badge badge-safe" id="badge-impact">✓ SAFE</div>
+    </div>
+
+  </div>
+
+  <!-- MID GRID -->
+  <div class="mid-grid">
+
+    <!-- Speed Chart -->
+    <div class="panel">
+      <div class="panel-title"><div class="dot"></div>Speed History</div>
+      <canvas id="speedChart"></canvas>
+      <div style="display:flex;justify-content:space-between;margin-top:8px;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">
+        <span>AVG: <span id="avg-speed" style="color:var(--accent)">—</span> km/h</span>
+        <span>MAX: <span id="max-speed" style="color:var(--accent2)">—</span> km/h</span>
+        <span>DIST: <span id="dist-val" style="color:var(--safe)">—</span> km</span>
+      </div>
+    </div>
+
+    <!-- Sensor Panel -->
+    <div class="panel">
+      <div class="panel-title"><div class="dot" style="background:var(--safe)"></div>Sensor Overview</div>
+      <div class="alcohol-meter">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:6px;font-family:'DM Mono',monospace">
+          <span>ALCOHOL METER</span>
+          <span id="alc-pct">0%</span>
+        </div>
+        <div class="meter-track">
+          <div class="meter-fill" id="alc-bar"></div>
+        </div>
+        <div class="meter-zones">
+          <span>0.00 SAFE</span><span>0.05 WARN</span><span>0.08+ DANGER</span>
+        </div>
+      </div>
+      <div style="margin-top:16px">
+        <div style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;letter-spacing:2px;margin-bottom:8px">ACTIVE SENSORS</div>
+        <div class="sensor-pills" id="sensor-pills">
+          <div class="sensor-pill ok" id="pill-mpu"><span class="icon">⚡</span>MPU6050</div>
+          <div class="sensor-pill ok" id="pill-mq3"><span class="icon">🧪</span>MQ-3 BAC</div>
+          <div class="sensor-pill ok" id="pill-ir"><span class="icon">🔴</span>IR Sensor</div>
+          <div class="sensor-pill ok" id="pill-gps"><span class="icon">📍</span>GPS</div>
+          <div class="sensor-pill ok" id="pill-gsm"><span class="icon">📡</span>GSM SIM800</div>
+          <div class="sensor-pill ok" id="pill-rfid"><span class="icon">🏷️</span>RFID</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Helmet + Location -->
+    <div class="panel">
+      <div class="panel-title"><div class="dot" style="background:var(--accent2)"></div>Helmet & Location</div>
+      <div class="helmet-visual">
+        <div class="helmet-svg-wrap">
+          <div class="helmet-ring ring1"></div>
+          <div class="helmet-ring ring2"></div>
+          <div class="helmet-emoji" id="helmet-icon">⛑️</div>
+        </div>
+        <div id="helmet-status-text" style="font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:2px;color:var(--safe)">HELMET DETECTED</div>
+      </div>
+      <div class="map-box">
+        <div class="map-grid-lines"></div>
+        <div class="map-ripple"></div>
+        <div class="map-ripple"></div>
+        <div class="map-ripple"></div>
+        <div class="map-dot"></div>
+        <div class="map-coords" id="gps-coords">12.9716° N, 77.5946° E</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- BOTTOM ROW -->
+  <div class="bottom-row">
+
+    <!-- Event Log -->
+    <div class="panel">
+      <div class="panel-title"><div class="dot" style="background:var(--warn)"></div>Event Log</div>
+      <div class="log-feed" id="log-feed"></div>
+    </div>
+
+    <!-- Temperature + Battery -->
+    <div class="panel">
+      <div class="panel-title"><div class="dot" style="background:var(--accent)"></div>Environment & Power</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div>
+          <div class="stat-label" style="font-size:10px">TEMPERATURE</div>
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:40px;color:var(--accent)" id="val-temp">32°C</div>
+          <div style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace">AMBIENT</div>
+        </div>
+        <div>
+          <div class="stat-label" style="font-size:10px">HUMIDITY</div>
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:40px;color:var(--accent2)" id="val-hum">68%</div>
+          <div style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace">RELATIVE</div>
+        </div>
+      </div>
+      <div style="margin-top:16px">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;margin-bottom:6px">
+          <span>BATTERY</span><span id="bat-pct">87%</span>
+        </div>
+        <div style="height:10px;background:var(--surface);border-radius:5px;overflow:hidden;border:1px solid var(--border)">
+          <div id="bat-bar" style="height:100%;background:linear-gradient(90deg,var(--safe),#00cc66);border-radius:5px;width:87%;transition:width 1s"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px">
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center">
+            <div style="font-size:20px">🏍️</div>
+            <div style="font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--text)" id="val-vibration">LOW</div>
+            <div style="font-size:10px;color:var(--muted);font-family:'DM Mono',monospace">VIBRATION</div>
+          </div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center">
+            <div style="font-size:20px">🌐</div>
+            <div style="font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--safe)" id="val-gsm">4G</div>
+            <div style="font-size:10px;color:var(--muted);font-family:'DM Mono',monospace">SIGNAL</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Emergency -->
+    <div class="panel">
+      <div class="panel-title"><div class="dot" style="background:var(--danger)"></div>Emergency System</div>
+      <button class="emergency-btn" onclick="triggerEmergency('manual')">
+        🆘 SEND EMERGENCY ALERT
+      </button>
+      <div class="contact-list">
+        <div class="contact-item">
+          <div class="contact-avatar">👨</div>
+          <div>
+            <div class="contact-name">Rajesh Kumar</div>
+            <div class="contact-rel">PARENT · +91 98765 43210</div>
+          </div>
+          <div style="margin-left:auto;color:var(--safe);font-size:12px">●</div>
+        </div>
+        <div class="contact-item">
+          <div class="contact-avatar">👩</div>
+          <div>
+            <div class="contact-name">Priya Kumar</div>
+            <div class="contact-rel">EMERGENCY · +91 91234 56789</div>
+          </div>
+          <div style="margin-left:auto;color:var(--safe);font-size:12px">●</div>
+        </div>
+        <div class="contact-item">
+          <div class="contact-avatar">🚑</div>
+          <div>
+            <div class="contact-name">City Ambulance</div>
+            <div class="contact-rel">MEDICAL · 108</div>
+          </div>
+          <div style="margin-left:auto;color:var(--safe);font-size:12px">●</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<!-- HARDWARE CONNECT PANEL -->
+<div id="hw-panel">
+  <div class="hw-modal">
+    <button class="hw-close" onclick="closeHwPanel()">✕</button>
+    <div class="hw-title">Connect Hardware</div>
+    <div class="hw-subtitle">Link your RideGuard helmet to real-time IoT data</div>
+
+    <div class="hw-option" onclick="selectConn('mqtt')">
+      <div class="opt-icon">📡</div>
+      <div>
+        <div class="opt-title">MQTT Broker (ESP32/Arduino)</div>
+        <div class="opt-desc">broker.hivemq.com · Port 8000 WebSocket</div>
+      </div>
+    </div>
+
+    <div class="hw-option" onclick="selectConn('serial')">
+      <div class="opt-icon">🔌</div>
+      <div>
+        <div class="opt-title">Serial / USB (Web Serial API)</div>
+        <div class="opt-desc">Direct USB connection — Chrome required</div>
+      </div>
+    </div>
+
+    <div class="hw-option" onclick="selectConn('websocket')">
+      <div class="opt-icon">🌐</div>
+      <div>
+        <div class="opt-title">WebSocket Server</div>
+        <div class="opt-desc">Custom ws:// server from your Raspberry Pi / ESP32</div>
+      </div>
+    </div>
+
+    <div id="conn-config" style="display:none;margin-top:20px">
+      <div style="font-size:12px;color:var(--muted);font-family:'DM Mono',monospace;margin-bottom:8px" id="conn-config-label">BROKER URL / IP ADDRESS</div>
+      <div class="hw-input-row">
+        <input class="hw-input" id="conn-url" placeholder="e.g. ws://192.168.1.100:9001" />
+        <button class="hw-connect-btn" onclick="connectHardware()">CONNECT</button>
+      </div>
+      <div id="conn-status-msg" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);margin-top:8px"></div>
+    </div>
+
+    <div class="hw-code-block">
+      <span style="color:var(--muted)">// Arduino / ESP32 JSON payload format</span><br>
+      {<br>
+      &nbsp;&nbsp;"helmet": 1,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--muted)">// IR sensor: 1=worn</span><br>
+      &nbsp;&nbsp;"alcohol": 0.00,&nbsp;&nbsp;<span style="color:var(--muted)">// MQ-3 BAC value</span><br>
+      &nbsp;&nbsp;"speed": 42,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--muted)">// GPS speed km/h</span><br>
+      &nbsp;&nbsp;"gforce": 0.2,&nbsp;&nbsp;&nbsp;<span style="color:var(--muted)">// MPU6050 g-force</span><br>
+      &nbsp;&nbsp;"temp": 32,&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--muted)">// DHT11 temp °C</span><br>
+      &nbsp;&nbsp;"lat": 12.9716,&nbsp;&nbsp;<span style="color:var(--muted)">// GPS latitude</span><br>
+      &nbsp;&nbsp;"lng": 77.5946&nbsp;&nbsp;&nbsp;<span style="color:var(--muted)">// GPS longitude</span><br>
+      }
+    </div>
+  </div>
+</div>
+
+<!-- CHART.JS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script>
+// ═══════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════
+let mode = 'demo';
+let connType = null;
+let mqttClient = null;
+let wsClient = null;
+let demoInterval = null;
+let chartInterval = null;
+let distance = 0;
+let lastSpeed = 0;
+let speedHistory = Array(40).fill(0);
+let alertActive = false;
+
+// ═══════════════════════════════════════════
+//  CHART SETUP
+// ═══════════════════════════════════════════
+const ctx = document.getElementById('speedChart').getContext('2d');
+const gradient = ctx.createLinearGradient(0, 0, 0, 140);
+gradient.addColorStop(0, 'rgba(0,229,255,0.3)');
+gradient.addColorStop(1, 'rgba(0,229,255,0)');
+
+const speedChart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: Array(40).fill(''),
+    datasets:[{
+      data: speedHistory,
+      borderColor: '#00e5ff',
+      backgroundColor: gradient,
+      borderWidth: 2,
+      pointRadius: 0,
+      fill: true,
+      tension: 0.4
+    }]
+  },
+  options: {
+    responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{display:false} },
+    scales:{
+      x:{ display:false },
+      y:{
+        min:0, max:120,
+        grid:{ color:'rgba(30,45,61,0.8)' },
+        ticks:{ color:'#556879', font:{family:'DM Mono'}, maxTicksLimit:4 }
+      }
+    },
+    animation:{ duration:200 }
+  }
+});
+
+// ═══════════════════════════════════════════
+//  UPDATE UI FROM DATA OBJECT
+// ═══════════════════════════════════════════
+function updateUI(data) {
+  const { helmet, alcohol, speed, gforce, temp, hum, lat, lng, battery } = data;
+
+  // Helmet
+  const helmetOn = helmet === 1 || helmet === true;
+  setCard('card-helmet', helmetOn ? 'safe' : 'danger');
+  setVal('val-helmet', helmetOn ? 'ON' : 'OFF', helmetOn ? 'safe' : 'danger');
+  setBadge('badge-helmet', helmetOn ? '✓ SAFE' : '✗ ALERT', helmetOn ? 'badge-safe' : 'badge-danger');
+  document.getElementById('helmet-icon').textContent = helmetOn ? '⛑️' : '😵';
+  document.getElementById('helmet-status-text').textContent = helmetOn ? 'HELMET DETECTED' : 'HELMET REMOVED!';
+  document.getElementById('helmet-status-text').style.color = helmetOn ? 'var(--safe)' : 'var(--danger)';
+  setpill('pill-ir', helmetOn);
+
+  // Alcohol
+  const alcPct = Math.min((alcohol / 0.12) * 100, 100);
+  const alcStatus = alcohol < 0.03 ? 'safe' : alcohol < 0.08 ? 'warn' : 'danger';
+  setCard('card-alcohol', alcStatus);
+  setVal('val-alcohol', alcohol.toFixed(2), alcStatus);
+  setBadge('badge-alcohol',
+    alcStatus==='safe'?'✓ CLEAR': alcStatus==='warn'?'⚠ WARN':'✗ DRUNK',
+    `badge-${alcStatus}`);
+  document.getElementById('alc-bar').style.width = alcPct + '%';
+  document.getElementById('alc-pct').textContent = Math.round(alcPct) + '%';
+
+  // Speed
+  const spStatus = speed > 100 ? 'danger' : speed > 70 ? 'warn' : 'safe';
+  setCard('card-speed', spStatus);
+  setVal('val-speed', Math.round(speed), '');
+  setBadge('badge-speed', speed>100?'OVER LIMIT':speed>70?'CAUTION':'NORMAL', `badge-${spStatus}`);
+  speedHistory.push(speed); speedHistory.shift();
+  speedChart.data.datasets[0].data = [...speedHistory];
+  speedChart.update('none');
+  distance += speed / 3600 / 2;
+  document.getElementById('avg-speed').textContent = Math.round(speedHistory.filter(s=>s>0).reduce((a,b)=>a+b,0)/Math.max(speedHistory.filter(s=>s>0).length,1));
+  document.getElementById('max-speed').textContent = Math.round(Math.max(...speedHistory));
+  document.getElementById('dist-val').textContent = distance.toFixed(1);
+
+  // Impact
+  const impStatus = gforce > 3 ? 'danger' : gforce > 1.5 ? 'warn' : 'safe';
+  setCard('card-impact', impStatus);
+  setVal('val-impact', gforce > 3 ? 'CRASH!' : gforce > 1.5 ? 'IMPACT' : 'NONE', impStatus);
+  document.getElementById('val-gforce').textContent = gforce.toFixed(1);
+  setBadge('badge-impact', gforce>3?'✗ CRASH':gforce>1.5?'⚠ BUMP':'✓ SAFE', `badge-${impStatus}`);
+
+  // Env
+  if(temp !== undefined) document.getElementById('val-temp').textContent = Math.round(temp)+'°C';
+  if(hum !== undefined) document.getElementById('val-hum').textContent = Math.round(hum)+'%';
+  if(battery !== undefined) {
+    document.getElementById('bat-pct').textContent = Math.round(battery)+'%';
+    document.getElementById('bat-bar').style.width = battery+'%';
+    const bc = battery > 50 ? 'var(--safe)' : battery > 20 ? 'var(--warn)' : 'var(--danger)';
+    document.getElementById('bat-bar').style.background = `linear-gradient(90deg,${bc},${bc})`;
+  }
+
+  // GPS
+  if(lat && lng) {
+    document.getElementById('gps-coords').textContent = `${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E`;
+  }
+
+  // Crash / Alcohol alerts
+  if (gforce > 3 && !alertActive) triggerEmergency('crash', `G-Force: ${gforce.toFixed(1)}g detected`);
+  if (alcohol >= 0.08 && !alertActive) triggerEmergency('alcohol', `BAC: ${alcohol.toFixed(2)}% — Drunk riding detected`);
+  if (!helmetOn && !alertActive) triggerEmergency('helmet', 'Rider removed helmet — Safety compromised');
+}
+
+// ═══════════════════════════════════════════
+//  UI HELPERS
+// ═══════════════════════════════════════════
+function setCard(id, status) {
+  const el = document.getElementById(id);
+  el.className = `stat-card ${status}`;
+}
+function setVal(id, val, status) {
+  const el = document.getElementById(id);
+  el.textContent = val;
+  el.className = `stat-val ${status}`;
+}
+function setBadge(id, text, cls) {
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.className = `stat-badge ${cls}`;
+}
+function setpill(id, ok) { }
+function setpill(id, ok) {
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.className = `sensor-pill ${ok ? 'ok' : 'bad'}`;
+}
+
+// ═══════════════════════════════════════════
+//  LOG SYSTEM
+// ═══════════════════════════════════════════
+function addLog(type, msg) {
+  const feed = document.getElementById('log-feed');
+  const now = new Date();
+  const t = now.toTimeString().slice(0,8);
+  const icons = {safe:'✓',warn:'⚠',danger:'✗',info:'ℹ'};
+  const div = document.createElement('div');
+  div.className = 'log-entry';
+  div.innerHTML = `<span class="log-time">${t}</span><span class="log-type-${type}">${icons[type]} ${msg}</span>`;
+  feed.insertBefore(div, feed.firstChild);
+  if(feed.children.length > 40) feed.removeChild(feed.lastChild);
+}
+
+// ═══════════════════════════════════════════
+//  EMERGENCY
+// ═══════════════════════════════════════════
+function triggerEmergency(reason, detail='') {
+  alertActive = true;
+  const msgs = {
+    crash: ['CRASH DETECTED', detail || 'High G-force impact — Emergency contacts alerted'],
+    alcohol: ['DRUNK RIDING', detail || 'Alcohol above legal limit — Contacts notified'],
+    helmet: ['HELMET OFF', detail || 'Rider removed helmet — Safety alert sent'],
+    manual: ['MANUAL SOS', 'Emergency alert sent to all contacts'],
+    speed: ['SPEED ALERT', 'Excessive speed — Warning sent']
+  };
+  const [title, msg] = msgs[reason] || ['ALERT', detail];
+  document.getElementById('alert-title').textContent = title;
+  document.getElementById('alert-msg').textContent = msg;
+  document.getElementById('alert-banner').classList.add('active');
+  addLog('danger', `${title}: ${msg}`);
+  document.getElementById('conn-dot').className = 'status-dot danger';
+}
+function dismissAlert() {
+  alertActive = false;
+  document.getElementById('alert-banner').classList.remove('active');
+  document.getElementById('conn-dot').className = 'status-dot';
+}
+
+// ═══════════════════════════════════════════
+//  DEMO MODE SIMULATION
+// ═══════════════════════════════════════════
+const scenarios = [
+  { helmet:1, alcohol:0.00, speed:45, gforce:0.2, temp:31, hum:65, battery:87, lat:12.9716, lng:77.5946 },
+  { helmet:1, alcohol:0.01, speed:62, gforce:0.3, temp:32, hum:68, battery:86, lat:12.9720, lng:77.5950 },
+  { helmet:1, alcohol:0.00, speed:38, gforce:0.2, temp:31, hum:66, battery:85, lat:12.9724, lng:77.5955 },
+];
+let scenIdx = 0;
+
+function startDemo() {
+  stopDemo();
+  addLog('info', 'Demo Mode started — simulating sensor data');
+  let tick = 0;
+  demoInterval = setInterval(() => {
+    tick++;
+    const base = scenarios[scenIdx % scenarios.length];
+    const noise = (r) => r + (Math.random()-0.5)*r*0.2;
+    const sData = {
+      helmet: tick === 60 ? 0 : 1, // briefly remove helmet at t=60
+      alcohol: tick === 90 ? 0.09 : parseFloat((base.alcohol + Math.random()*0.005).toFixed(3)),
+      speed: Math.max(0, Math.min(110, noise(base.speed) + Math.sin(tick/10)*8)),
+      gforce: tick === 120 ? 4.2 : parseFloat((base.gforce + Math.random()*0.1).toFixed(2)),
+      temp: noise(base.temp),
+      hum: noise(base.hum),
+      battery: Math.max(0, base.battery - tick*0.01),
+      lat: base.lat + tick*0.00001,
+      lng: base.lng + tick*0.00001
+    };
+    updateUI(sData);
+    if(tick % 20 === 0) addLog('info', `Speed: ${Math.round(sData.speed)} km/h · Temp: ${Math.round(sData.temp)}°C`);
+    if(tick % 30 === 0) scenIdx++;
+    if(tick === 60) addLog('warn', 'Helmet removed by rider!');
+    if(tick === 90) addLog('danger', 'Alcohol detected: 0.09 BAC');
+    if(tick === 120) addLog('danger', 'High G-force: 4.2g — possible crash!');
+    if(tick > 130) tick = 0; // reset scenario
+  }, 500);
+}
+
+function stopDemo() {
+  if(demoInterval) clearInterval(demoInterval);
+  demoInterval = null;
+}
+
+// ═══════════════════════════════════════════
+//  MODE TOGGLE
+// ═══════════════════════════════════════════
+function setMode(m) {
+  mode = m;
+  document.getElementById('btn-demo').classList.toggle('active', m==='demo');
+  document.getElementById('btn-real').classList.toggle('active', m==='real');
+  if(m === 'demo') {
+    document.getElementById('conn-label').textContent = 'DEMO LIVE';
+    document.getElementById('conn-dot').className = 'status-dot';
+    closeHwPanel(); startDemo();
+  } else {
+    stopDemo();
+    document.getElementById('conn-label').textContent = 'DISCONNECTED';
+    document.getElementById('conn-dot').className = 'status-dot disconnected';
+    document.getElementById('hw-panel').classList.add('open');
+  }
+}
+
+// ═══════════════════════════════════════════
+//  HARDWARE CONNECT
+// ═══════════════════════════════════════════
+function selectConn(type) {
+  connType = type;
+  document.querySelectorAll('.hw-option').forEach(o=>o.style.borderColor='');
+  event.currentTarget.style.borderColor = 'var(--accent)';
+  document.getElementById('conn-config').style.display = 'block';
+  const labels = {
+    mqtt: 'MQTT BROKER URL (ws://broker:8000)',
+    serial: 'Click CONNECT to open Serial Port picker',
+    websocket: 'WEBSOCKET URL (ws://192.168.x.x:port)'
+  };
+  document.getElementById('conn-config-label').textContent = labels[type];
+  document.getElementById('conn-url').placeholder =
+    type==='mqtt' ? 'ws://broker.hivemq.com:8000/mqtt' :
+    type==='serial' ? '(auto-detected)' :
+    'ws://192.168.1.100:9001';
+}
+
+async function connectHardware() {
+  const url = document.getElementById('conn-url').value;
+  const statusMsg = document.getElementById('conn-status-msg');
+
+  if(connType === 'serial') {
+    await connectSerial();
+    return;
+  }
+
+  statusMsg.textContent = 'Connecting…';
+  statusMsg.style.color = 'var(--warn)';
+
+  try {
+    if(connType === 'mqtt' || connType === 'websocket') {
+      const ws = new WebSocket(url);
+      ws.onopen = () => {
+        wsClient = ws;
+        statusMsg.textContent = '✓ Connected!';
+        statusMsg.style.color = 'var(--safe)';
+        document.getElementById('conn-label').textContent = 'HARDWARE LIVE';
+        document.getElementById('conn-dot').className = 'status-dot';
+        addLog('safe', `Connected to ${connType.toUpperCase()} at ${url}`);
+        setTimeout(closeHwPanel, 1000);
+      };
+      ws.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          updateUI(data);
+        } catch(err) { console.warn('Parse error:', err); }
+      };
+      ws.onerror = () => {
+        statusMsg.textContent = '✗ Connection failed — check URL & device';
+        statusMsg.style.color = 'var(--danger)';
+      };
+      ws.onclose = () => {
+        if(mode==='real') {
+          addLog('warn', 'Hardware disconnected');
+          document.getElementById('conn-label').textContent = 'RECONNECTING…';
+        }
+      };
+    }
+  } catch(e) {
+    statusMsg.textContent = `Error: ${e.message}`;
+    statusMsg.style.color = 'var(--danger)';
+  }
+}
+
+async function connectSerial() {
+  const statusMsg = document.getElementById('conn-status-msg');
+  if(!('serial' in navigator)) {
+    statusMsg.textContent = '✗ Web Serial not supported — use Chrome/Edge';
+    statusMsg.style.color = 'var(--danger)';
+    return;
+  }
+  try {
+    const port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 115200 });
+    statusMsg.textContent = '✓ Serial port opened!';
+    statusMsg.style.color = 'var(--safe)';
+    addLog('safe', 'Serial port connected at 115200 baud');
+    const decoder = new TextDecoderStream();
+    port.readable.pipeTo(decoder.writable);
+    const reader = decoder.readable.getReader();
+    let buffer = '';
+    setTimeout(closeHwPanel, 1000);
+    const readLoop = async () => {
+      while(true) {
+        const { value, done } = await reader.read();
+        if(done) break;
+        buffer += value;
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+        for(const line of lines) {
+          try {
+            const data = JSON.parse(line.trim());
+            updateUI(data);
+          } catch {}
+        }
+      }
+    };
+    readLoop();
+  } catch(e) {
+    statusMsg.textContent = `✗ ${e.message}`;
+    statusMsg.style.color = 'var(--danger)';
+  }
+}
+
+function closeHwPanel() {
+  document.getElementById('hw-panel').classList.remove('open');
+  if(mode==='real' && !wsClient) {
+    mode = 'demo';
+    document.getElementById('btn-demo').classList.add('active');
+    document.getElementById('btn-real').classList.remove('active');
+    document.getElementById('conn-label').textContent = 'DEMO LIVE';
+    document.getElementById('conn-dot').className = 'status-dot';
+    startDemo();
+    addLog('info', 'Fell back to Demo Mode — no hardware connected');
+  }
+}
+
+// ═══════════════════════════════════════════
+//  BOOT
+// ═══════════════════════════════════════════
+addLog('info', 'RideGuard system initialized');
+addLog('safe', 'All sensors nominal');
+addLog('info', 'Demo Mode active — switch to Real Hardware to connect');
+startDemo();
+</script>
+</body>
+</html>
